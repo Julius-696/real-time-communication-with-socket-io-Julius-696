@@ -14,10 +14,13 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    socket.connect();
-    socket.emit('join', { username: user.username });
+    if (!socket.connected) {
+      socket.connect();
+      socket.emit('join', { username: user.username });
+    }
 
     socket.on('newMessage', (message) => {
+      console.log('Received message:', message);
       setMessages(prev => [...prev, message]);
     });
 
@@ -28,7 +31,6 @@ export default function Chat() {
     return () => {
       socket.off('newMessage');
       socket.off('onlineUsers');
-      socket.disconnect();
     };
   }, [user]);
 
@@ -36,9 +38,24 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const sendMessage = (text) => {
-    if (!text.trim()) return;
-    socket.emit('sendMessage', { content: text });
+  const handleSendMessage = (content) => {
+    if (!content.trim()) return;
+    
+    // Create a temporary message object for immediate display
+    const tempMessage = {
+      _id: Date.now(),
+      content,
+      sender: {
+        username: user.username
+      },
+      createdAt: new Date()
+    };
+
+    // Add message to local state immediately
+    setMessages(prev => [...prev, tempMessage]);
+
+    // Send to server
+    socket.emit('sendMessage', { content });
   };
 
   return (
@@ -51,7 +68,7 @@ export default function Chat() {
           <h4>Online Users ({onlineUsers.length})</h4>
           <ul>
             {onlineUsers.map(u => (
-              <li key={u.socketId}>{u.username}</li>
+              <li key={u.socketId}>{u.username} {u.username === user.username && '(You)'}</li>
             ))}
           </ul>
         </div>
@@ -62,18 +79,20 @@ export default function Chat() {
           {messages.map((msg, index) => (
             <div 
               key={msg._id || index}
-              className={`message ${msg.sender?.username === user?.username ? 'my-message' : 'other-message'}`}
+              className={`message ${msg.sender.username === user.username ? 'my-message' : 'other-message'}`}
             >
               <div className="message-header">
-                <span>{msg.sender?.username}</span>
-                <span>{new Date(msg.createdAt).toLocaleTimeString()}</span>
+                <span className="username">{msg.sender.username}</span>
+                <span className="time">
+                  {new Date(msg.createdAt).toLocaleTimeString()}
+                </span>
               </div>
               <div className="message-content">{msg.content}</div>
             </div>
           ))}
           <div ref={messagesEndRef} />
         </div>
-        <MessageInput onSend={sendMessage} />
+        <MessageInput onSend={handleSendMessage} />
       </div>
     </div>
   );

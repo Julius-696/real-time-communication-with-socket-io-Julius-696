@@ -10,33 +10,44 @@ import routes from './routes/index.js';
 const app = express();
 const httpServer = createServer(app);
 
+// Middleware
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
 // CORS configuration
 app.use(cors({
   origin: "http://localhost:5173",
   credentials: true
 }));
 
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static('uploads'));
-
-// API routes
-app.use('/api', routes);
-
-// Socket.io setup
+// Socket.io setup with CORS
 const io = new Server(httpServer, {
   cors: {
-    origin: "http://localhost:5173",
-    methods: ["GET", "POST"],
-    credentials: true
+    origin: ['http://localhost:5173', 'https://your-client-url.onrender.com'],
+    methods: ['GET', 'POST'],
+    credentials: true,
+    transports: ['websocket', 'polling']
   }
+});
+
+// Basic error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Something went wrong!' });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' });
 });
 
 // Connect to MongoDB
 connectDB();
 
-// Socket.io handler
+// Routes
+app.use('/api', routes);
+
+// Socket handler
 socketHandler(io);
 
 const PORT = process.env.PORT || 5000;

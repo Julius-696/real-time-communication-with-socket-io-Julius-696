@@ -5,10 +5,10 @@ export default function MessageInput({ onSend }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!message.trim()) return;
-    
-    onSend(message);
-    setMessage('');
+    if (message.trim()) {
+      onSend(message);
+      setMessage(''); // Clear input after sending
+    }
   };
 
   return (

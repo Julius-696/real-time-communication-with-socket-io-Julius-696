@@ -9,26 +9,34 @@ export default function socketHandler(io) {
 
     socket.on('join', async ({ username }) => {
       try {
-        console.log('User joining:', username);
-        let user = await User.findOne({ username });
+        // Remove any existing socket for this username
+        for (const [socketId, existingUsername] of onlineUsers.entries()) {
+          if (existingUsername === username) {
+            onlineUsers.delete(socketId);
+          }
+        }
+
+        // Add new socket connection
+        onlineUsers.set(socket.id, username);
         
+        let user = await User.findOne({ username });
         if (!user) {
-          user = await User.create({ username, socketId: socket.id });
+          user = await User.create({ username });
         }
 
         user.socketId = socket.id;
         user.online = true;
         await user.save();
 
-        onlineUsers.set(socket.id, username);
-        
-        // Broadcast updated online users list
-        io.emit('onlineUsers', Array.from(onlineUsers.entries()).map(([id, name]) => ({
+        // Emit updated online users list
+        const onlineUsersList = Array.from(onlineUsers.entries()).map(([id, name]) => ({
           socketId: id,
           username: name
-        })));
+        }));
 
-        console.log('User joined successfully:', username);
+        io.emit('onlineUsers', onlineUsersList);
+        console.log('Current online users:', onlineUsersList);
+
       } catch (error) {
         console.error('Join error:', error);
       }
@@ -36,7 +44,6 @@ export default function socketHandler(io) {
 
     socket.on('sendMessage', async (data) => {
       try {
-        console.log('Received message:', data);
         const username = onlineUsers.get(socket.id);
         const user = await User.findOne({ username });
 
@@ -47,8 +54,7 @@ export default function socketHandler(io) {
 
         const message = await Message.create({
           content: data.content,
-          sender: user._id,
-          room: data.room || 'global'
+          sender: user._id
         });
 
         const populatedMessage = {
@@ -58,7 +64,6 @@ export default function socketHandler(io) {
             _id: user._id,
             username: user.username
           },
-          room: message.room,
           createdAt: message.createdAt
         };
 
@@ -72,19 +77,24 @@ export default function socketHandler(io) {
     socket.on('disconnect', async () => {
       const username = onlineUsers.get(socket.id);
       if (username) {
+        onlineUsers.delete(socket.id);
         const user = await User.findOne({ username });
         if (user) {
           user.online = false;
           user.lastSeen = new Date();
           await user.save();
         }
-        onlineUsers.delete(socket.id);
-        io.emit('onlineUsers', Array.from(onlineUsers.entries()).map(([id, name]) => ({
+
+        // Emit updated online users list
+        const onlineUsersList = Array.from(onlineUsers.entries()).map(([id, name]) => ({
           socketId: id,
           username: name
-        })));
+        }));
+
+        io.emit('onlineUsers', onlineUsersList);
+        console.log('User disconnected:', username);
+        console.log('Remaining online users:', onlineUsersList);
       }
-      console.log('User disconnected:', socket.id);
     });
   });
 }
