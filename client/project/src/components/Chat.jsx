@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import MessageInput from './MessageInput';
 import socket from '../socket/socketClient';
@@ -14,29 +14,21 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    // Connect socket if not connected
-    if (!socket.connected) {
-      socket.connect();
-      socket.emit('join', { username: user.username });
-    }
+    socket.connect();
+    socket.emit('join', { username: user.username });
 
-    // Listen for messages and users
     socket.on('newMessage', (message) => {
-      console.log('Message received:', message);
       setMessages(prev => [...prev, message]);
     });
 
     socket.on('onlineUsers', (users) => {
-      console.log('Online users updated:', users);
       setOnlineUsers(users);
     });
-
-    // Fetch existing messages
-    fetchMessages();
 
     return () => {
       socket.off('newMessage');
       socket.off('onlineUsers');
+      socket.disconnect();
     };
   }, [user]);
 
@@ -44,28 +36,9 @@ export default function Chat() {
     scrollToBottom();
   }, [messages]);
 
-  const fetchMessages = async () => {
-    try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/messages?room=global`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      const data = await response.json();
-      setMessages(data);
-    } catch (error) {
-      console.error('Error fetching messages:', error);
-    }
-  };
-
   const sendMessage = (text) => {
     if (!text.trim()) return;
-    
-    console.log('Sending message:', text);
-    socket.emit('sendMessage', {
-      content: text,
-      room: 'global'
-    });
+    socket.emit('sendMessage', { content: text });
   };
 
   return (
@@ -77,11 +50,8 @@ export default function Chat() {
         <div className="online-users">
           <h4>Online Users ({onlineUsers.length})</h4>
           <ul>
-            {onlineUsers.map((onlineUser) => (
-              <li key={onlineUser.socketId}>
-                {onlineUser.username}
-                {onlineUser.socketId === socket.id && ' (You)'}
-              </li>
+            {onlineUsers.map(u => (
+              <li key={u.socketId}>{u.username}</li>
             ))}
           </ul>
         </div>
@@ -95,10 +65,8 @@ export default function Chat() {
               className={`message ${msg.sender?.username === user?.username ? 'my-message' : 'other-message'}`}
             >
               <div className="message-header">
-                <span className="username">{msg.sender?.username || 'Unknown'}</span>
-                <span className="time">
-                  {new Date(msg.createdAt).toLocaleTimeString()}
-                </span>
+                <span>{msg.sender?.username}</span>
+                <span>{new Date(msg.createdAt).toLocaleTimeString()}</span>
               </div>
               <div className="message-content">{msg.content}</div>
             </div>
